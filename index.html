@@ -147,7 +147,7 @@ footer{border-top:1px solid var(--line);padding:20px 0;color:var(--dim);font-siz
         <div class="field">
           <label class="l" for="uploadUrlOverride">Upload URL override <span style="color:var(--dim);font-weight:400">(optional)</span></label>
           <input id="uploadUrlOverride" type="text" placeholder="Leave blank to use the returned uploadUrl" />
-          <p class="help">Set this only to test a specific upload endpoint.</p>
+          <p class="help">By default, the returned upload path uses the configured API host. Set this only to test a specific upload endpoint.</p>
         </div>
       </div>
     </div>
@@ -353,10 +353,14 @@ async function runUpload(){
 
     const info=uploadInfo(initData);
     const override=$('uploadUrlOverride').value.trim();
-    const target=override||info.uploadUrl;
-    if(!target)throw new Error('Upload initiation succeeded, but uploadUrl was not found in the response. Inspect Step 1 and update uploadInfo() to match your API schema.');
+    if(!override&&!info.uploadUrl)throw new Error('Upload initiation succeeded, but uploadUrl was not found in the response. Inspect Step 1 and update uploadInfo() to match your API schema.');
 
-    const tu=new URL(target,base);
+    const apiBase=new URL(base);
+    const tu=new URL(override||info.uploadUrl,base);
+    if(!override){
+      tu.protocol=apiBase.protocol;
+      tu.host=apiBase.host;
+    }
     if(tu.protocol!=='https:'&&tu.hostname!=='localhost'&&tu.hostname!=='127.0.0.1')throw new Error('The returned upload URL must use HTTPS.');
 
     setStep(2,'Uploading…','running');
