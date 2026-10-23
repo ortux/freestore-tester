@@ -1,0 +1,663 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Storage API Tester</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    body { font-family: Inter, system-ui, sans-serif; }
+    .mono { font-family: Consolas, Monaco, monospace; }
+    .log-entry { overflow-wrap: anywhere; }
+    .drop-zone.dragover { border-color: #6366f1; background: #eef2ff; }
+    pre { white-space: pre-wrap; overflow-wrap: anywhere; }
+  </style>
+</head>
+<body class="bg-slate-950 text-slate-100 min-h-screen">
+  <header class="border-b border-slate-800 bg-slate-900/80">
+    <div class="max-w-6xl mx-auto px-5 py-5 flex items-center gap-3">
+      <div class="w-11 h-11 rounded-xl bg-indigo-600 flex items-center justify-center text-xl">
+        ⇧
+      </div>
+      <div class="flex-1">
+        <h1 class="text-xl font-bold">Storage API Tester</h1>
+        <p class="text-xs text-slate-400 mt-1">
+          Upload files, inspect requests and debug responses
+        </p>
+      </div>
+      <span class="text-xs border border-slate-700 rounded-full px-3 py-1 text-slate-300">
+        v1 API
+      </span>
+    </div>
+  </header>
+
+  <main class="max-w-6xl mx-auto px-5 py-7 grid lg:grid-cols-5 gap-6">
+
+    <!-- Configuration and upload -->
+    <section class="lg:col-span-2 space-y-5">
+
+      <div class="bg-slate-900 border border-slate-800 rounded-2xl p-5">
+        <h2 class="font-semibold text-lg">01. Configuration</h2>
+        <p class="text-sm text-slate-400 mt-1 mb-5">
+          Enter your API endpoint and credentials.
+        </p>
+
+        <label class="text-sm text-slate-300 block mb-2">API Base URL</label>
+        <input id="baseUrl"
+          value="https://storage.saikatacademy.in/api/v1"
+          class="w-full rounded-lg bg-slate-950 border border-slate-700 p-3 text-sm outline-none focus:border-indigo-500 mb-4"
+          placeholder="https://example.com/api/v1" />
+
+        <label class="text-sm text-slate-300 block mb-2">API Key</label>
+        <div class="flex gap-2 mb-2">
+          <input id="apiKey" type="password" autocomplete="off"
+            class="min-w-0 flex-1 rounded-lg bg-slate-950 border border-slate-700 p-3 text-sm outline-none focus:border-indigo-500"
+            placeholder="Paste sk_live_xxxxxxxxxxxx" />
+          <button id="toggleKey"
+            class="px-3 rounded-lg border border-slate-700 text-sm hover:bg-slate-800">
+            Show
+          </button>
+        </div>
+        <p class="text-xs text-amber-300 mb-4">
+          Use a development key if possible. This page does not save the key.
+        </p>
+
+        <label class="text-sm text-slate-300 block mb-2">Upload URL field override (optional)</label>
+        <input id="uploadUrlOverride"
+          class="w-full rounded-lg bg-slate-950 border border-slate-700 p-3 text-sm outline-none focus:border-indigo-500"
+          placeholder="Leave blank to use the returned uploadUrl" />
+
+        <p class="text-xs text-slate-500 mt-2">
+          Use this only if you need to test a specific upload endpoint.
+        </p>
+      </div>
+
+      <div class="bg-slate-900 border border-slate-800 rounded-2xl p-5">
+        <h2 class="font-semibold text-lg">02. Select a file</h2>
+        <p class="text-sm text-slate-400 mt-1 mb-4">
+          Choose a file or drag it into the area below.
+        </p>
+
+        <label id="dropZone"
+          class="drop-zone cursor-pointer block border-2 border-dashed border-slate-700 rounded-xl p-7 text-center transition">
+          <input id="fileInput" type="file" class="hidden" />
+          <div class="text-3xl mb-3">📁</div>
+          <div class="font-medium">Click to select a file</div>
+          <div class="text-sm text-slate-500 mt-2">or drag and drop here</div>
+        </label>
+
+        <div id="fileInfo" class="hidden mt-4 bg-slate-950 border border-slate-800 rounded-lg p-3">
+          <div class="flex items-center gap-3">
+            <div class="text-2xl">📄</div>
+            <div class="flex-1 min-w-0">
+              <div id="fileName" class="font-medium text-sm truncate"></div>
+              <div id="fileMeta" class="text-xs text-slate-400 mt-1"></div>
+            </div>
+            <button id="removeFile" class="text-slate-400 hover:text-red-400">✕</button>
+          </div>
+        </div>
+
+        <div class="mt-5">
+          <div class="flex justify-between text-xs text-slate-400 mb-2">
+            <span id="progressLabel">Upload progress</span>
+            <span id="progressPercent">0%</span>
+          </div>
+          <div class="h-2 rounded-full bg-slate-800 overflow-hidden">
+            <div id="progressBar" class="h-full bg-indigo-500 transition-all" style="width:0%"></div>
+          </div>
+        </div>
+
+        <button id="uploadBtn"
+          class="w-full mt-5 rounded-xl bg-indigo-600 hover:bg-indigo-500 disabled:opacity-40 disabled:cursor-not-allowed font-semibold p-3 transition">
+          Start upload workflow →
+        </button>
+
+        <button id="listBtn"
+          class="w-full mt-3 rounded-xl border border-slate-700 hover:bg-slate-800 p-3 font-medium transition">
+          Fetch file list
+        </button>
+
+        <button id="clearBtn"
+          class="w-full mt-3 text-sm text-slate-400 hover:text-white p-2">
+          Clear execution log
+        </button>
+      </div>
+    </section>
+
+    <!-- Execution log -->
+    <section class="lg:col-span-3 space-y-5">
+      <div class="bg-slate-900 border border-slate-800 rounded-2xl p-5">
+        <div class="flex items-center justify-between gap-3">
+          <div>
+            <h2 class="font-semibold text-lg">Execution workflow</h2>
+            <p class="text-sm text-slate-400 mt-1">Live request and response details</p>
+          </div>
+          <span id="statusBadge"
+            class="text-xs rounded-full px-3 py-1 bg-slate-800 text-slate-300">Ready</span>
+        </div>
+
+        <div class="grid grid-cols-3 gap-2 mt-6">
+          <div id="stepCard1" class="rounded-xl border border-slate-700 p-3">
+            <div id="stepIcon1" class="text-slate-500 text-sm">01 · ○</div>
+            <div class="text-sm font-medium mt-2">Initiate</div>
+            <div id="stepStatus1" class="text-xs text-slate-500 mt-1">Waiting</div>
+          </div>
+          <div id="stepCard2" class="rounded-xl border border-slate-700 p-3">
+            <div id="stepIcon2" class="text-slate-500 text-sm">02 · ○</div>
+            <div class="text-sm font-medium mt-2">Upload bytes</div>
+            <div id="stepStatus2" class="text-xs text-slate-500 mt-1">Waiting</div>
+          </div>
+          <div id="stepCard3" class="rounded-xl border border-slate-700 p-3">
+            <div id="stepIcon3" class="text-slate-500 text-sm">03 · ○</div>
+            <div class="text-sm font-medium mt-2">List files</div>
+            <div id="stepStatus3" class="text-xs text-slate-500 mt-1">Waiting</div>
+          </div>
+        </div>
+      </div>
+
+      <div id="logContainer" class="space-y-4">
+        <div class="bg-slate-900 border border-slate-800 rounded-2xl p-5">
+          <div class="flex items-center gap-2 mb-3">
+            <span class="w-2 h-2 rounded-full bg-slate-500"></span>
+            <h3 class="font-medium">Console</h3>
+          </div>
+          <p class="text-sm text-slate-400">
+            Configure your API key, select a file and start the workflow.
+          </p>
+        </div>
+      </div>
+
+      <div class="bg-slate-900 border border-slate-800 rounded-2xl p-5">
+        <div class="flex justify-between items-center gap-3 mb-4">
+          <h2 class="font-semibold text-lg">File listing</h2>
+          <span id="fileCount" class="text-xs text-slate-400">Not loaded</span>
+        </div>
+        <div id="filesResult" class="text-sm text-slate-400">
+          Your API response will appear here.
+        </div>
+      </div>
+
+      <div class="bg-slate-900 border border-slate-800 rounded-2xl p-5">
+        <h2 class="font-semibold">API request reference</h2>
+        <div class="mt-4 space-y-4 text-sm">
+          <div>
+            <span class="text-emerald-400 font-semibold">POST</span>
+            <code class="mono text-xs ml-2">/uploads/initiate</code>
+            <p class="text-slate-400 mt-1">Send filename, mimeType and fileSize.</p>
+          </div>
+          <div>
+            <span class="text-sky-400 font-semibold">PUT</span>
+            <code class="mono text-xs ml-2">uploadUrl</code>
+            <p class="text-slate-400 mt-1">Send the raw file bytes with its content type.</p>
+          </div>
+          <div>
+            <span class="text-emerald-400 font-semibold">GET</span>
+            <code class="mono text-xs ml-2">/files</code>
+            <p class="text-slate-400 mt-1">Retrieve the file listing.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="text-center text-xs text-slate-600 py-8">
+    Storage API Tester · Credentials are kept in page memory only
+  </footer>
+
+<script>
+(() => {
+  const $ = id => document.getElementById(id);
+
+  let selectedFile = null;
+  let busy = false;
+
+  const steps = [1, 2, 3];
+
+  function escapeHTML(value) {
+    return String(value ?? '').replace(/[&<>"']/g, c => ({
+      '&': '&amp;', '<': '&lt;', '>': '&gt;',
+      '"': '&quot;', "'": '&#39;'
+    })[c]);
+  }
+
+  function formatSize(bytes) {
+    if (bytes < 1024) return bytes + ' B';
+    if (bytes < 1024 ** 2) return (bytes / 1024).toFixed(1) + ' KB';
+    if (bytes < 1024 ** 3) return (bytes / 1024 ** 2).toFixed(2) + ' MB';
+    return (bytes / 1024 ** 3).toFixed(2) + ' GB';
+  }
+
+  function setStatus(text, kind = 'neutral') {
+    const badge = $('statusBadge');
+    badge.textContent = text;
+    const styles = {
+      neutral: 'bg-slate-800 text-slate-300',
+      running: 'bg-indigo-950 text-indigo-300',
+      success: 'bg-emerald-950 text-emerald-300',
+      error: 'bg-red-950 text-red-300'
+    };
+    badge.className = 'text-xs rounded-full px-3 py-1 ' + styles[kind];
+  }
+
+  function setStep(n, status, kind = 'neutral') {
+    const card = $('stepCard' + n);
+    const icon = $('stepIcon' + n);
+    const label = $('stepStatus' + n);
+    const colors = {
+      neutral: ['border-slate-700', 'text-slate-500'],
+      running: ['border-indigo-500', 'text-indigo-300'],
+      success: ['border-emerald-700', 'text-emerald-400'],
+      error: ['border-red-700', 'text-red-400']
+    };
+    card.className = 'rounded-xl border p-3 ' + colors[kind][0];
+    icon.className = 'text-sm ' + colors[kind][1];
+    icon.textContent = String(n).padStart(2, '0') + ' · ' +
+      (kind === 'success' ? '✓' : kind === 'error' ? '✕' : kind === 'running' ? '…' : '○');
+    label.className = 'text-xs mt-1 ' + colors[kind][1];
+    label.textContent = status;
+  }
+
+  function resetSteps() {
+    steps.forEach(n => setStep(n, 'Waiting'));
+  }
+
+  function progress(value, label = 'Upload progress') {
+    const v = Math.max(0, Math.min(100, value));
+    $('progressBar').style.width = v + '%';
+    $('progressPercent').textContent = Math.round(v) + '%';
+    $('progressLabel').textContent = label;
+  }
+
+  function addLog(title, method, url, status, request, response, kind = 'neutral') {
+    const color = kind === 'success' ? 'text-emerald-400' :
+      kind === 'error' ? 'text-red-400' :
+      kind === 'running' ? 'text-indigo-300' : 'text-slate-300';
+
+    const wrapper = document.createElement('article');
+    wrapper.className = 'bg-slate-900 border border-slate-800 rounded-2xl p-5 log-entry';
+    wrapper.innerHTML = `
+      <div class="flex items-start justify-between gap-3">
+        <div>
+          <h3 class="font-semibold">${escapeHTML(title)}</h3>
+          <p class="mono text-xs text-slate-400 mt-2">${escapeHTML(method)} ${escapeHTML(url)}</p>
+        </div>
+        <span class="text-xs ${color} shrink-0">${escapeHTML(status)}</span>
+      </div>
+      <div class="mt-4">
+        <div class="text-xs text-slate-500 mb-2">REQUEST</div>
+        <pre class="mono text-xs bg-slate-950 border border-slate-800 rounded-lg p-3">${escapeHTML(request)}</pre>
+      </div>
+      <div class="mt-4">
+        <div class="text-xs text-slate-500 mb-2">RESPONSE</div>
+        <pre class="mono text-xs bg-slate-950 border border-slate-800 rounded-lg p-3">${escapeHTML(response)}</pre>
+      </div>`;
+    $('logContainer').prepend(wrapper);
+    return wrapper;
+  }
+
+  async function readResponse(response) {
+    const text = await response.text();
+    if (!text) return { raw: '', data: null };
+    try {
+      return { raw: text, data: JSON.parse(text) };
+    } catch {
+      return { raw: text, data: null };
+    }
+  }
+
+  function getBase() {
+    const raw = $('baseUrl').value.trim().replace(/\/+$/, '');
+    if (!raw) throw new Error('Enter the API base URL.');
+    const url = new URL(raw);
+    if (url.protocol !== 'https:' && url.hostname !== 'localhost' && url.hostname !== '127.0.0.1') {
+      throw new Error('Use HTTPS for API requests.');
+    }
+    return raw;
+  }
+
+  function getKey() {
+    const key = $('apiKey').value.trim();
+    if (!key) throw new Error('Paste your API key first.');
+    return key;
+  }
+
+  function authHeaders(key) {
+    return { Authorization: 'Bearer ' + key };
+  }
+
+  function uploadInfo(data) {
+    // Supports common response shapes:
+    // { uploadUrl, token }, { data: { uploadUrl, token } }
+    const root = data?.data ?? data;
+    const uploadUrl = root?.uploadUrl ?? root?.upload_url ?? root?.url;
+    const token = root?.token ?? root?.uploadToken ?? root?.upload_token;
+    return { root, uploadUrl, token };
+  }
+
+  function redact(text, key) {
+    if (!key) return text;
+    return String(text).split(key).join('[REDACTED]');
+  }
+
+  async function requestJSON({ title, method, url, headers, body, step }) {
+    setStep(step, 'Requesting…', 'running');
+    const requestText = body === undefined ? '(No body)' : JSON.stringify(body, null, 2);
+    const entry = addLog(title, method, url, 'In progress', requestText, 'Waiting for server…', 'running');
+
+    try {
+      const response = await fetch(url, {
+        method,
+        headers,
+        ...(body === undefined ? {} : { body: JSON.stringify(body) })
+      });
+      const result = await readResponse(response);
+      const key = $('apiKey').value.trim();
+      const responseText = redact(result.raw || '(Empty response)', key);
+
+      entry.querySelector('span').textContent = response.status + ' ' + response.statusText;
+      entry.querySelector('span').className =
+        'text-xs shrink-0 ' + (response.ok ? 'text-emerald-400' : 'text-red-400');
+      entry.querySelectorAll('pre')[1].textContent = responseText;
+
+      if (!response.ok) {
+        throw new Error('HTTP ' + response.status + ': ' + responseText.slice(0, 800));
+      }
+      setStep(step, 'Completed · HTTP ' + response.status, 'success');
+      return result.data;
+    } catch (err) {
+      entry.querySelector('span').textContent = 'Failed';
+      entry.querySelector('span').className = 'text-xs shrink-0 text-red-400';
+      entry.querySelectorAll('pre')[1].textContent =
+        redact(err.message || String(err), $('apiKey').value.trim()) +
+        '\n\nCheck API CORS settings, network access and endpoint configuration.';
+      setStep(step, 'Failed', 'error');
+      throw err;
+    }
+  }
+
+  function setFile(file) {
+    selectedFile = file || null;
+    $('fileInfo').classList.toggle('hidden', !selectedFile);
+    if (selectedFile) {
+      $('fileName').textContent = selectedFile.name;
+      $('fileMeta').textContent =
+        (selectedFile.type || 'application/octet-stream') + ' · ' +
+        formatSize(selectedFile.size);
+    }
+  }
+
+  $('fileInput').addEventListener('change', e => {
+    setFile(e.target.files?.[0]);
+  });
+
+  $('removeFile').addEventListener('click', () => {
+    setFile(null);
+    $('fileInput').value = '';
+  });
+
+  $('toggleKey').addEventListener('click', () => {
+    const input = $('apiKey');
+    const show = input.type === 'password';
+    input.type = show ? 'text' : 'password';
+    $('toggleKey').textContent = show ? 'Hide' : 'Show';
+  });
+
+  const drop = $('dropZone');
+  drop.addEventListener('dragover', e => {
+    e.preventDefault();
+    drop.classList.add('dragover');
+  });
+  drop.addEventListener('dragleave', () => drop.classList.remove('dragover'));
+  drop.addEventListener('drop', e => {
+    e.preventDefault();
+    drop.classList.remove('dragover');
+    if (e.dataTransfer.files?.[0]) setFile(e.dataTransfer.files[0]);
+  });
+
+  async function runUpload() {
+    if (busy) return;
+    busy = true;
+    $('uploadBtn').disabled = true;
+    $('listBtn').disabled = true;
+    $('filesResult').textContent = 'Waiting for upload workflow…';
+    resetSteps();
+    progress(0);
+    setStatus('Running', 'running');
+
+    let key;
+    try {
+      key = getKey();
+      const base = getBase();
+      if (!selectedFile) throw new Error('Choose a file to upload.');
+
+      // STEP 1: Initiate the upload.
+      const initBody = {
+        filename: selectedFile.name,
+        mimeType: selectedFile.type || 'application/octet-stream',
+        fileSize: selectedFile.size
+      };
+
+      const initData = await requestJSON({
+        title: 'Step 1 — Initiate upload',
+        method: 'POST',
+        url: base + '/uploads/initiate',
+        headers: {
+          ...authHeaders(key),
+          'Content-Type': 'application/json'
+        },
+        body: initBody,
+        step: 1
+      });
+
+      if (!initData) throw new Error('The initiate endpoint returned no JSON data.');
+
+      const info = uploadInfo(initData);
+      const target = $('uploadUrlOverride').value.trim() || info.uploadUrl;
+
+      if (!target) {
+        throw new Error(
+          'Upload initiation succeeded, but uploadUrl was not found in the response. ' +
+          'Inspect Step 1 and update uploadInfo() to match your API response schema.'
+        );
+      }
+
+      const targetURL = new URL(target, base);
+      if (targetURL.protocol !== 'https:' &&
+          targetURL.hostname !== 'localhost' &&
+          targetURL.hostname !== '127.0.0.1') {
+        throw new Error('The returned upload URL must use HTTPS.');
+      }
+
+      // STEP 2: PUT raw bytes. Do not JSON-encode the file.
+      setStep(2, 'Uploading…', 'running');
+      progress(0, 'Uploading file bytes');
+
+      const putHeaders = {
+        'Content-Type': selectedFile.type || 'application/octet-stream'
+      };
+
+      // Some APIs issue a separate token for the upload URL.
+      // Adjust this logic if your backend expects a different header.
+      if (info.token) {
+        putHeaders.Authorization = 'Bearer ' + info.token;
+      } else if (!info.uploadUrl || $('uploadUrlOverride').value.trim()) {
+        putHeaders.Authorization = 'Bearer ' + key;
+      }
+
+      const putEntry = addLog(
+        'Step 2 — Upload raw bytes',
+        'PUT',
+        targetURL.href,
+        'In progress',
+        'Raw file: ' + selectedFile.name + '\n' +
+          'Content-Type: ' + putHeaders['Content-Type'] + '\n' +
+          'Content-Length: ' + selectedFile.size + ' bytes\n' +
+          'Authorization: ' + (putHeaders.Authorization ? '[REDACTED]' : '(not sent)'),
+        'Sending file bytes…',
+        'running'
+      );
+
+      let putResponseReceived = false;
+      try {
+        // XMLHttpRequest provides upload progress events.
+        const putResponse = await new Promise((resolve, reject) => {
+          const xhr = new XMLHttpRequest();
+          xhr.open('PUT', targetURL.href);
+          Object.entries(putHeaders).forEach(([k, v]) => xhr.setRequestHeader(k, v));
+
+          xhr.upload.onprogress = event => {
+            if (event.lengthComputable) {
+              progress(event.loaded / event.total * 100, 'Uploading file bytes');
+            }
+          };
+
+          xhr.onload = () => resolve({
+            status: xhr.status,
+            statusText: xhr.statusText,
+            text: xhr.responseText
+          });
+          xhr.onerror = () => reject(new Error(
+            'Upload request failed. Check CORS, upload URL, and network access.'
+          ));
+          xhr.onabort = () => reject(new Error('Upload aborted.'));
+          xhr.send(selectedFile);
+        });
+        putResponseReceived = true;
+
+        putEntry.querySelector('span').textContent =
+          putResponse.status + ' ' + putResponse.statusText;
+        putEntry.querySelector('span').className =
+          'text-xs shrink-0 ' +
+          (putResponse.status >= 200 && putResponse.status < 300
+            ? 'text-emerald-400' : 'text-red-400');
+        putEntry.querySelectorAll('pre')[1].textContent =
+          putResponse.text || '(Empty response)';
+
+        if (putResponse.status < 200 || putResponse.status >= 300) {
+          throw new Error(
+            'File upload failed with HTTP ' + putResponse.status +
+            (putResponse.text ? '\nServer response: ' + putResponse.text : '')
+          );
+        }
+
+        setStep(2, 'Completed · HTTP ' + putResponse.status, 'success');
+        progress(100, 'Upload completed');
+      } catch (err) {
+        putEntry.querySelector('span').textContent = 'Failed';
+        putEntry.querySelector('span').className = 'text-xs shrink-0 text-red-400';
+        if (!putResponseReceived) {
+          putEntry.querySelectorAll('pre')[1].textContent =
+            redact(err.message || String(err), key);
+        }
+        setStep(2, 'Failed', 'error');
+        throw err;
+      }
+
+      // STEP 3: Fetch files.
+      await fetchFilesInternal(base, key, 3);
+      setStatus('Workflow completed', 'success');
+    } catch (err) {
+      setStatus('Workflow failed', 'error');
+      addLog('Workflow error', 'CLIENT', '-', 'Failed',
+        '(No additional request)', redact(err.message || String(err), key || ''),
+        'error');
+    } finally {
+      busy = false;
+      $('uploadBtn').disabled = false;
+      $('listBtn').disabled = false;
+    }
+  }
+
+  function renderFiles(data) {
+    const root = data?.data ?? data;
+    const files = Array.isArray(root) ? root :
+      root?.files ?? root?.items ?? root?.results ?? null;
+
+    if (!Array.isArray(files)) {
+      $('fileCount').textContent = 'Response received';
+      $('filesResult').innerHTML =
+        '<pre class="mono text-xs bg-slate-950 p-3 rounded-lg border border-slate-800"></pre>';
+      $('filesResult').querySelector('pre').textContent =
+        JSON.stringify(data, null, 2);
+      return;
+    }
+
+    $('fileCount').textContent = files.length + ' file(s)';
+
+    if (!files.length) {
+      $('filesResult').textContent = 'No files found.';
+      return;
+    }
+
+    $('filesResult').innerHTML = `
+      <div class="overflow-x-auto">
+        <table class="w-full text-left text-xs">
+          <thead class="text-slate-500 border-b border-slate-800">
+            <tr>
+              <th class="py-3 pr-3">Filename</th>
+              <th class="py-3 pr-3">Type</th>
+              <th class="py-3">Size</th>
+            </tr>
+          </thead>
+          <tbody id="fileRows"></tbody>
+        </table>
+      </div>`;
+
+    const tbody = $('fileRows');
+    files.forEach(file => {
+      const tr = document.createElement('tr');
+      tr.className = 'border-b border-slate-800';
+      const name = file.filename ?? file.name ?? file.originalName ?? file.id ?? 'Unnamed file';
+      const type = file.mimeType ?? file.mime_type ?? file.contentType ?? '—';
+      const size = Number(file.fileSize ?? file.size ?? file.sizeBytes);
+      tr.innerHTML = `
+        <td class="py-3 pr-3 text-slate-200 break-all">${escapeHTML(name)}</td>
+        <td class="py-3 pr-3 text-slate-400">${escapeHTML(type)}</td>
+        <td class="py-3 text-slate-400">${Number.isFinite(size) ? escapeHTML(formatSize(size)) : '—'}</td>`;
+      tbody.appendChild(tr);
+    });
+  }
+
+  async function fetchFilesInternal(base, key, step = 3) {
+    const data = await requestJSON({
+      title: step === 3 ? 'Step 3 — List files' : 'List files',
+      method: 'GET',
+      url: base + '/files',
+      headers: authHeaders(key),
+      step
+    });
+    renderFiles(data);
+    return data;
+  }
+
+  $('uploadBtn').addEventListener('click', runUpload);
+
+  $('listBtn').addEventListener('click', async () => {
+    if (busy) return;
+    busy = true;
+    $('listBtn').disabled = true;
+    setStatus('Fetching files', 'running');
+    try {
+      const base = getBase();
+      const key = getKey();
+      await fetchFilesInternal(base, key, 3);
+      setStatus('Files loaded', 'success');
+    } catch (err) {
+      setStatus('Request failed', 'error');
+      $('filesResult').textContent = redact(err.message, $('apiKey').value.trim());
+    } finally {
+      busy = false;
+      $('listBtn').disabled = false;
+    }
+  });
+
+  $('clearBtn').addEventListener('click', () => {
+    $('logContainer').innerHTML = '';
+    resetSteps();
+    setStatus('Ready');
+  });
+})();
+</script>
+</body>
+</html>
